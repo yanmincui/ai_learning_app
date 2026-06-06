@@ -1,0 +1,117 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+      - 20260528-224212-init-project-design
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Run lint
+        run: pnpm lint
+
+      - name: Build app
+        run: pnpm build
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy over SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          APP_DIR: ${{ secrets.VPS_APP_DIR }}
+          VPS_ENV: ${{ secrets.VPS_ENV }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${VPS_HOST}" ] || [ -z "${VPS_USER}" ] || [ -z "${VPS_SSH_KEY}" ] || [ -z "${APP_DIR}" ]; then
+            echo "Missing one or more required secrets: VPS_HOST, VPS_USER, VPS_SSH_KEY, VPS_APP_DIR"
+            exit 1
+          fi
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${VPS_SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${VPS_PORT}" "${VPS_HOST}" >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/deploy_key -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "APP_DIR='${APP_DIR}' bash -s" <<'EOF'
+          set -euo pipefail
+
+          mkdir -p "${APP_DIR}"
+          if [ -f "${APP_DIR}/.env" ]; then
+            cp "${APP_DIR}/.env" /tmp/ai-learning-h5.env
+          fi
+
+          find "${APP_DIR}" -mindepth 1 -maxdepth 1 ! -name ".env" -exec rm -rf {} +
+          EOF
+
+          tar \
+            --exclude='.git' \
+            --exclude='.next' \
+            --exclude='.pnpm-store' \
+            --exclude='node_modules' \
+            --exclude='.env' \
+            --exclude='.env.local' \
+            -czf - . | ssh -i ~/.ssh/deploy_key -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "tar -xzf - -C '${APP_DIR}'"
+
+          if [ -n "${VPS_ENV}" ]; then
+            printf '%s\n' "${VPS_ENV}" | ssh -i ~/.ssh/deploy_key -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" \
+              "cat > /tmp/ai-learning-h5.env.from_secret"
+          fi
+
+          ssh -i ~/.ssh/deploy_key -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "APP_DIR='${APP_DIR}' bash -s" <<'EOF'
+          set -euo pipefail
+
+          if [ -f /tmp/ai-learning-h5.env ]; then
+            mv /tmp/ai-learning-h5.env "${APP_DIR}/.env"
+          elif [ -f /tmp/ai-learning-h5.env.from_secret ]; then
+            mv /tmp/ai-learning-h5.env.from_secret "${APP_DIR}/.env"
+          fi
+
+          cd "${APP_DIR}"
+
+          if [ ! -f .env ]; then
+            echo ".env is missing in ${APP_DIR}; create it from .env.example before deploying."
+            exit 1
+          fi
+
+          docker compose build ai-learning-h5
+          docker compose up -d ai-learning-h5
+          docker image prune -f
+          EOF
