@@ -188,6 +188,7 @@ Get-Content "$HOME\.ssh\ai_learning_h5_deploy"
 ```text
 APP_PORT=3000
 NEXT_PUBLIC_APP_URL=http://你的VPS_IP:3000
+NEXT_PUBLIC_BASE_PATH=
 
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
@@ -203,6 +204,19 @@ NEWS_INGEST_SECRET=
 
 ```text
 NEXT_PUBLIC_APP_URL=https://你的域名
+```
+
+如果你要挂到子路径，例如：
+
+```text
+https://ian.today/ai-learning
+```
+
+则必须同时配置：
+
+```text
+NEXT_PUBLIC_APP_URL=https://ian.today/ai-learning
+NEXT_PUBLIC_BASE_PATH=/ai-learning
 ```
 
 ## 5. 第一次触发部署
@@ -360,7 +374,11 @@ server {
     listen 80;
     server_name 你的域名;
 
-    location / {
+    location = /ai-learning {
+        return 301 /ai-learning/;
+    }
+
+    location ^~ /ai-learning/ {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -388,12 +406,14 @@ sudo certbot --nginx -d 你的域名
 
 ```text
 NEXT_PUBLIC_APP_URL=http://你的VPS_IP:3000
+NEXT_PUBLIC_BASE_PATH=
 ```
 
 改成：
 
 ```text
-NEXT_PUBLIC_APP_URL=https://你的域名
+NEXT_PUBLIC_APP_URL=https://ian.today/ai-learning
+NEXT_PUBLIC_BASE_PATH=/ai-learning
 ```
 
 重新运行一次 GitHub Actions 部署。

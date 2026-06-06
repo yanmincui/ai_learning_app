@@ -2,10 +2,12 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import "./globals.css";
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
 export const metadata: Metadata = {
   title: "AI 30 天学习",
   description: "30 天完成 AI 应用开发入门，首页聚合最近 30 天 AI 新闻摘要 roadmap。",
-  manifest: "/manifest.webmanifest",
+  manifest: `${basePath}/manifest.webmanifest`,
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -33,7 +35,7 @@ export default function RootLayout({
           {`
             if ("serviceWorker" in navigator) {
               window.addEventListener("load", () => {
-                navigator.serviceWorker.register("/sw.js").catch(() => {});
+                navigator.serviceWorker.register("${basePath}/sw.js", { scope: "${basePath || "/"}" }).catch(() => {});
               });
             }
           `}

@@ -24,6 +24,7 @@ sudo chown -R $USER:$USER /opt/ai-learning-h5
 cat > /opt/ai-learning-h5/.env <<'EOF'
 APP_PORT=3000
 NEXT_PUBLIC_APP_URL=https://your-domain.com
+NEXT_PUBLIC_BASE_PATH=
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
@@ -80,6 +81,7 @@ VPS_ENV=完整的 .env 文件内容，可选但推荐
 ```text
 APP_PORT=3000
 NEXT_PUBLIC_APP_URL=https://your-domain.com
+NEXT_PUBLIC_BASE_PATH=
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
@@ -124,7 +126,11 @@ server {
     listen 80;
     server_name your-domain.com;
 
-    location / {
+    location = /ai-learning {
+        return 301 /ai-learning/;
+    }
+
+    location ^~ /ai-learning/ {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Host $host;

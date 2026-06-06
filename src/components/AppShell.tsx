@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import type { Assessment, CourseDay, NewsItem } from "@/lib/types";
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
 type Props = {
   courseDays: CourseDay[];
   newsItems: NewsItem[];
@@ -96,7 +98,7 @@ export function AppShell({ courseDays, newsItems, today, updatedAt }: Props) {
     window.localStorage.setItem("ai-learning-progress-v2", JSON.stringify(nextProgress));
 
     if (userId) {
-      await fetch("/api/progress", {
+      await fetch(`${basePath}/api/progress`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, day, status: "done", quizScore, wrongQuestionIds })

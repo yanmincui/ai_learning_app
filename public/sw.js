@@ -1,5 +1,7 @@
 const CACHE_NAME = "ai-learning-h5-v1";
-const APP_SHELL = ["/", "/manifest.webmanifest"];
+const scopePath = new URL(self.registration.scope).pathname.replace(/\/$/, "");
+const withScope = (path) => `${scopePath}${path}`;
+const APP_SHELL = [withScope("/"), withScope("/manifest.webmanifest")];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -31,6 +33,6 @@ self.addEventListener("fetch", (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
         return response;
       })
-      .catch(() => caches.match(request).then((cached) => cached || caches.match("/")))
+      .catch(() => caches.match(request).then((cached) => cached || caches.match(withScope("/"))))
   );
 });
