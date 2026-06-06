@@ -17,6 +17,15 @@ import {
   X
 } from "lucide-react";
 import type { Assessment, CourseDay, NewsItem } from "@/lib/types";
+import {
+  clearQuizDraft,
+  mergeDayProgress,
+  readQuizDraft,
+  readLocalProgress,
+  writeQuizDraft,
+  writeLocalProgress
+} from "@/lib/progress-cache";
+import type { CachedDayProgress } from "@/lib/progress-cache";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
@@ -27,13 +36,7 @@ type Props = {
   updatedAt: string;
 };
 
-type DayProgress = {
-  status: "todo" | "doing" | "done";
-  quizScore?: number;
-  wrongQuestionIds?: string[];
-  lastReviewedAt?: string;
-};
-
+type DayProgress = CachedDayProgress;
 type LocalProgress = Record<number, DayProgress>;
 type NavId = "home" | "learning" | "news" | "projects" | "profile";
 
@@ -57,23 +60,11 @@ export function AppShell({ courseDays, newsItems, today, updatedAt }: Props) {
   const wrongCount = Object.values(progress).reduce((sum, item) => sum + (item.wrongQuestionIds?.length ?? 0), 0);
 
   useEffect(() => {
-    const savedProgress = window.localStorage.getItem("ai-learning-progress-v2");
-    const legacyProgress = window.localStorage.getItem("ai-learning-progress");
     const savedUserId =
       window.localStorage.getItem("ai-learning-user-id") ??
       `guest-${crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
 
-    if (savedProgress) {
-      setProgress(JSON.parse(savedProgress));
-    } else if (legacyProgress) {
-      const legacy = JSON.parse(legacyProgress) as Record<number, "todo" | "doing" | "done">;
-      const migrated = Object.fromEntries(
-        Object.entries(legacy).map(([day, status]) => [day, { status }])
-      ) as LocalProgress;
-      setProgress(migrated);
-      window.localStorage.setItem("ai-learning-progress-v2", JSON.stringify(migrated));
-    }
-
+    setProgress(readLocalProgress(window.localStorage));
     window.localStorage.setItem("ai-learning-user-id", savedUserId);
     setUserId(savedUserId);
   }, []);
@@ -83,19 +74,39 @@ export function AppShell({ courseDays, newsItems, today, updatedAt }: Props) {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  async function saveDayProgress(day: number, quizScore: number, wrongQuestionIds: string[]) {
-    const nextProgress: LocalProgress = {
-      ...progress,
-      [day]: {
-        status: "done",
-        quizScore,
-        wrongQuestionIds,
-        lastReviewedAt: new Date().toISOString()
+  function updateCachedProgress(updater: (current: LocalProgress) => LocalProgress) {
+    setProgress((current) => {
+      const nextProgress = updater(current);
+      writeLocalProgress(window.localStorage, nextProgress);
+      return nextProgress;
+    });
+  }
+
+  function openCourse(course: CourseDay) {
+    setSelectedCourse(course);
+
+    updateCachedProgress((current) => {
+      if (current[course.day]?.status === "done") {
+        return current;
       }
+
+      return mergeDayProgress(current, course.day, {
+        status: "doing",
+        lastReviewedAt: new Date().toISOString()
+      });
+    });
+  }
+
+  async function saveDayProgress(day: number, quizScore: number, wrongQuestionIds: string[]) {
+    const completedProgress: DayProgress = {
+      status: "done",
+      quizScore,
+      wrongQuestionIds,
+      lastReviewedAt: new Date().toISOString()
     };
 
-    setProgress(nextProgress);
-    window.localStorage.setItem("ai-learning-progress-v2", JSON.stringify(nextProgress));
+    updateCachedProgress((current) => mergeDayProgress(current, day, completedProgress));
+    clearQuizDraft(window.localStorage, day);
 
     if (userId) {
       await fetch(`${basePath}/api/progress`, {
@@ -117,7 +128,7 @@ export function AppShell({ courseDays, newsItems, today, updatedAt }: Props) {
             </div>
             <button
               type="button"
-              onClick={() => setSelectedCourse(activeCourse)}
+              onClick={() => openCourse(activeCourse)}
               className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-mint text-xl font-bold text-ink"
               title="查看今日学习内容"
             >
@@ -169,7 +180,7 @@ export function AppShell({ courseDays, newsItems, today, updatedAt }: Props) {
                 status={itemProgress?.status ?? (item.day === activeDay ? "doing" : "todo")}
                 score={itemProgress?.quizScore}
                 locked={item.day > activeDay + 2}
-                onOpen={setSelectedCourse}
+                onOpen={openCourse}
               />
             );
           })}
@@ -203,6 +214,14 @@ export function AppShell({ courseDays, newsItems, today, updatedAt }: Props) {
           course={selectedCourse}
           progress={progress[selectedCourse.day]}
           onClose={() => setSelectedCourse(null)}
+          onStart={() =>
+            updateCachedProgress((current) =>
+              mergeDayProgress(current, selectedCourse.day, {
+                status: current[selectedCourse.day]?.status === "done" ? "done" : "doing",
+                lastReviewedAt: new Date().toISOString()
+              })
+            )
+          }
           onSubmit={async (quizScore, wrongQuestionIds) => {
             await saveDayProgress(selectedCourse.day, quizScore, wrongQuestionIds);
           }}
@@ -335,17 +354,21 @@ function CourseDetail({
   course,
   progress,
   onClose,
+  onStart,
   onSubmit
 }: {
   course: CourseDay;
   progress?: DayProgress;
   onClose: () => void;
+  onStart: () => void;
   onSubmit: (quizScore: number, wrongQuestionIds: string[]) => Promise<void>;
 }) {
   const [answers, setAnswers] = useState<Record<string, string | boolean>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [phase, setPhase] = useState<"learn" | "quiz" | "summary">("learn");
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [draftLoadedDay, setDraftLoadedDay] = useState<number | null>(null);
   const objectiveQuestions = course.assessments.filter((item) => item.type !== "short_answer");
   const currentAssessment = course.assessments[currentIndex];
   const currentAnswer = answers[currentAssessment.id];
@@ -356,6 +379,44 @@ function CourseDetail({
   const correctCount = objectiveQuestions.length - wrongQuestionIds.length;
   const quizScore = Math.round((correctCount / objectiveQuestions.length) * 100);
   const isLastQuestion = currentIndex === course.assessments.length - 1;
+
+  useEffect(() => {
+    const draft = readQuizDraft(window.localStorage, course.day);
+
+    setAnswers(draft?.answers ?? {});
+    setCurrentIndex(Math.min(draft?.currentIndex ?? 0, course.assessments.length - 1));
+    setPhase(draft?.phase ?? "learn");
+    setSubmitted(draft?.phase === "summary");
+    setSaving(false);
+    setDraftLoadedDay(course.day);
+  }, [course.assessments.length, course.day]);
+
+  useEffect(() => {
+    if (draftLoadedDay !== course.day) {
+      return;
+    }
+
+    writeQuizDraft(window.localStorage, {
+      day: course.day,
+      phase,
+      currentIndex,
+      answers,
+      updatedAt: new Date().toISOString()
+    });
+  }, [answers, course.day, currentIndex, draftLoadedDay, phase]);
+
+  function startQuiz() {
+    onStart();
+    setSubmitted(false);
+    setPhase("quiz");
+  }
+
+  function updateAnswer(value: string | boolean) {
+    setAnswers((current) => ({
+      ...current,
+      [currentAssessment.id]: value
+    }));
+  }
 
   async function goNext() {
     if (!currentAnswered) {
@@ -370,6 +431,7 @@ function CourseDetail({
     setSaving(true);
     await onSubmit(quizScore, wrongQuestionIds);
     setSubmitted(true);
+    setPhase("summary");
     setSaving(false);
   }
 
@@ -397,58 +459,68 @@ function CourseDetail({
 
         <div className="mt-4 grid grid-cols-2 gap-3">
           <InfoPill icon={Clock3} label="预计时长" value={`${course.minutes} 分钟`} />
-          <InfoPill icon={Target} label="测验状态" value={progress?.quizScore ? `${progress.quizScore} 分` : "未完成"} />
+          <InfoPill
+            icon={Target}
+            label="测验状态"
+            value={typeof progress?.quizScore === "number" ? `${progress.quizScore} 分` : "未完成"}
+          />
         </div>
 
-        <DetailBlock icon={Target} title="学习目标" items={course.learningObjectives} />
-        <ConceptGrid concepts={course.concepts} />
-        <DetailBlock icon={BookOpen} title="深挖清单" items={course.deepDives} />
-        <DetailBlock icon={ListChecks} title="今日任务" items={course.tasks} />
-
-        <section className="mt-5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <HelpCircle size={18} className="text-mint" />
-              <h3 className="text-base font-bold">记忆测验</h3>
+        {phase === "learn" ? (
+          <CourseLearningIntro
+            course={course}
+            hasDraft={Object.keys(answers).length > 0}
+            onStart={startQuiz}
+          />
+        ) : (
+          <section className="mt-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <HelpCircle size={18} className="text-mint" />
+                <h3 className="text-base font-bold">记忆测验</h3>
+              </div>
+              <span className="rounded-full bg-mist px-3 py-1 text-xs font-bold text-ink/60">
+                {submitted ? "总览" : `${currentIndex + 1}/${course.assessments.length}`}
+              </span>
             </div>
-            <span className="rounded-full bg-mist px-3 py-1 text-xs font-bold text-ink/60">
-              {submitted ? "总览" : `${currentIndex + 1}/${course.assessments.length}`}
-            </span>
-          </div>
 
-          {!submitted ? (
-            <div className="mt-3">
-              <AssessmentCard
-                assessment={currentAssessment}
-                value={currentAnswer}
-                showExplanation={currentAnswered}
-                wasWrongBefore={progress?.wrongQuestionIds?.includes(currentAssessment.id) ?? false}
-                onChange={(value) =>
-                  setAnswers((current) => ({
-                    ...current,
-                    [currentAssessment.id]: value
-                  }))
-                }
+            <button
+              type="button"
+              onClick={() => setPhase("learn")}
+              className="mt-3 h-10 w-full rounded-2xl bg-mist text-xs font-bold text-ink/60"
+            >
+              返回知识点
+            </button>
+
+            {!submitted ? (
+              <div className="mt-3">
+                <AssessmentCard
+                  assessment={currentAssessment}
+                  value={currentAnswer}
+                  showExplanation={currentAnswered}
+                  wasWrongBefore={progress?.wrongQuestionIds?.includes(currentAssessment.id) ?? false}
+                  onChange={updateAnswer}
+                />
+                <button
+                  type="button"
+                  onClick={goNext}
+                  disabled={!currentAnswered || saving}
+                  className="mt-3 h-12 w-full rounded-2xl bg-mint text-sm font-bold text-white disabled:bg-ink/15 disabled:text-ink/35"
+                >
+                  {isLastQuestion ? (saving ? "正在保存..." : "完成测验，查看总览") : "下一题"}
+                </button>
+              </div>
+            ) : (
+              <QuizOverview
+                assessments={course.assessments}
+                answers={answers}
+                quizScore={quizScore}
+                correctCount={correctCount}
+                objectiveTotal={objectiveQuestions.length}
               />
-              <button
-                type="button"
-                onClick={goNext}
-                disabled={!currentAnswered || saving}
-                className="mt-3 h-12 w-full rounded-2xl bg-mint text-sm font-bold text-white disabled:bg-ink/15 disabled:text-ink/35"
-              >
-                {isLastQuestion ? (saving ? "正在保存..." : "完成测验，查看总览") : "下一题"}
-              </button>
-            </div>
-          ) : (
-            <QuizOverview
-              assessments={course.assessments}
-              answers={answers}
-              quizScore={quizScore}
-              correctCount={correctCount}
-              objectiveTotal={objectiveQuestions.length}
-            />
-          )}
-        </section>
+            )}
+          </section>
+        )}
 
         {submitted ? (
           <div className="mt-5 rounded-2xl bg-mint/12 p-4">
@@ -499,6 +571,43 @@ function CourseDetail({
         </div>
       </article>
     </div>
+  );
+}
+
+function CourseLearningIntro({
+  course,
+  hasDraft,
+  onStart
+}: {
+  course: CourseDay;
+  hasDraft: boolean;
+  onStart: () => void;
+}) {
+  return (
+    <section className="mt-5">
+      <div className="rounded-2xl bg-mint/10 p-4 ring-1 ring-mint/20">
+        <div className="flex items-center gap-2">
+          <BookOpen size={18} className="text-mint" />
+          <h3 className="text-base font-bold">先学知识点</h3>
+        </div>
+        <p className="mt-2 text-xs leading-5 text-ink/62">
+          先完成下面的概念、清单和任务，再进入 5 道记忆测验。答题进度会自动缓存在本机，退出后也可以继续。
+        </p>
+      </div>
+
+      <DetailBlock icon={Target} title="学习目标" items={course.learningObjectives} />
+      <ConceptGrid concepts={course.concepts} />
+      <DetailBlock icon={BookOpen} title="深挖清单" items={course.deepDives} />
+      <DetailBlock icon={ListChecks} title="今日任务" items={course.tasks} />
+
+      <button
+        type="button"
+        onClick={onStart}
+        className="mt-5 h-12 w-full rounded-2xl bg-mint text-sm font-bold text-white shadow-sm"
+      >
+        {hasDraft ? "继续测验" : "开始测验"}
+      </button>
+    </section>
   );
 }
 
