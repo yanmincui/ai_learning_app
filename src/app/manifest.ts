@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "AI 30 天学习",
     short_name: "AI学习",
     description: "30 天完成 AI 应用开发入门",
-    start_url: `${basePath || "/"}`,
+    start_url: basePath ? `${basePath}/` : "/",
     display: "standalone",
     background_color: "#f5f7f4",
     theme_color: "#2bbf9f",
