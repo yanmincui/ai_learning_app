@@ -26,4 +26,7 @@ pnpm build
 pnpm ingest:news
 ```
 
-部署到 VPS 见 [docs/deployment-centos9.md](docs/deployment-centos9.md)。
+部署到 VPS：
+
+- Docker + GitHub 自动部署：见 [docs/vps-step-by-step-install.md](docs/vps-step-by-step-install.md)
+- 传统 CentOS/PM2 部署：见 [docs/deployment-centos9.md](docs/deployment-centos9.md)
