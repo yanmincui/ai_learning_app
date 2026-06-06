@@ -1,4 +1,4 @@
-import type { Assessment, CourseDay, CourseModule, Difficulty } from "./types";
+import type { Assessment, CourseDay, CourseKnowledgeCard, CourseModule, Difficulty } from "./types";
 
 const refs = {
   openaiPrompt: {
@@ -139,7 +139,150 @@ const moduleBooks: Record<CourseModule, Array<(typeof refs)[keyof typeof refs]>>
   综合项目: [refs.aiEngineering, refs.designingMlSystems, refs.openaiAgentGuide]
 };
 
-type CourseSeed = Omit<CourseDay, "assessments" | "deepDives" | "recommendedBooks"> & {
+const moduleKnowledgeCards: Record<CourseModule, CourseKnowledgeCard[]> = {
+  基础认知: [
+    card(
+      "LLM 的工作方式",
+      "大语言模型接收文本 Token，结合上下文预测后续输出。学习时要同时关注能力边界：它擅长归纳、改写、生成和语言推理，但不天然保证事实正确。",
+      ["Token 决定上下文容量、费用和延迟。", "上下文窗口变大不等于自动理解所有信息。", "事实型任务要配合来源、检索或人工校验。"],
+      refs.googleLlms
+    ),
+    card(
+      "Transformer 与注意力直觉",
+      "Transformer 的关键直觉是让模型在一段序列里判断哪些词与当前输出最相关。自注意力不是“记住全部内容”，而是学习不同位置之间的关联权重。",
+      ["注意力帮助模型建立长距离依赖。", "训练学习参数，推理使用参数生成输出。", "长文本任务仍需要清晰结构和关键信息排序。"],
+      refs.huggingFace
+    ),
+    card(
+      "AI 应用的四层结构",
+      "一个可用的 AI 应用通常不只是模型调用，还包括提示词、工具、数据和评测。工程上要把不稳定的模型输出放进可观察、可回放、可降级的流程里。",
+      ["模型负责语言能力，工具负责真实动作。", "数据决定是否能回答业务事实。", "评测用于持续发现输出漂移和回归。"],
+      refs.openaiAgents
+    )
+  ],
+  API实战: [
+    card(
+      "消息角色与上下文组织",
+      "OpenAI-compatible Chat API 通常用 system、user、assistant 等消息组织对话。系统规则、用户输入、历史回答要分层管理，避免把密钥、权限或内部策略暴露给前端。",
+      ["system 放全局角色、边界和输出规则。", "user 放用户真实输入，不要混入服务端密钥。", "多轮历史要控制长度和敏感信息。"],
+      refs.openaiPrompt
+    ),
+    card(
+      "Prompt Engineering 的稳定性",
+      "好的提示词不是一句神奇口令，而是任务说明、背景、约束、示例、输出格式和失败条件的组合。few-shot 示例适合让模型学习风格、格式和判断标准。",
+      ["先写清任务目标，再写输入输出格式。", "用示例固定边界情况。", "把 Prompt 当作可测试资产维护。"],
+      refs.openaiPrompt
+    ),
+    card(
+      "结构化输出与 Schema",
+      "结构化输出把模型回答约束到 JSON Schema，适合表单抽取、分类、工作流参数和数据库写入。相比只要求 JSON，它更强调字段、类型和必填项的一致性。",
+      ["服务端仍要校验 schema 和业务规则。", "失败时要设计重试、降级和人工确认。", "不要把用户可控 schema 直接用于高权限操作。"],
+      refs.openaiStructured
+    )
+  ],
+  RAG知识库: [
+    card(
+      "Embeddings 与语义检索",
+      "Embedding 把文本映射为向量，使系统能按语义相似度检索，而不是只按关键词匹配。它适合搜索、聚类、推荐、分类和异常发现等场景。",
+      ["相似度高表示语义更接近，不代表事实一定正确。", "向量检索常和 metadata filter 搭配。", "查询语句本身也需要改写和清洗。"],
+      refs.openaiEmbeddings
+    ),
+    card(
+      "RAG 的两段式链路",
+      "RAG 通常分为索引阶段和回答阶段：先解析、切分、嵌入、入库；查询时再检索、重排、拼接上下文并生成带引用的回答。",
+      ["Indexing 质量决定能不能召回。", "Retrieval 质量决定模型能看到什么。", "Generation 要明确引用、拒答和不确定性。"],
+      refs.langchainRag
+    ),
+    card(
+      "Chunk、TopK 与引用",
+      "知识库质量常常卡在切分和召回。chunk 太小会丢上下文，太大又会带入噪声；TopK 太低漏信息，太高会挤占上下文并增加误导。",
+      ["按标题、段落和语义边界切分优于固定字数一刀切。", "为 chunk 保存来源、时间、权限和业务标签。", "回答页要展示引用片段，便于用户核验。"],
+      refs.langchainRetrieval
+    )
+  ],
+  Agent工作流: [
+    card(
+      "Tool / Function Calling",
+      "工具调用让模型把自然语言意图转换成结构化参数，再由程序执行真实函数。设计工具时要把 schema、权限、参数校验和失败处理放在第一位。",
+      ["模型只提出调用意图，程序负责执行和校验。", "高风险工具要加人工确认。", "工具结果要回传给模型继续推理。"],
+      refs.openaiAgents
+    ),
+    card(
+      "Agentic Design Patterns",
+      "常见 Agentic Design Pattern 包括 Reflection、Tool Use、Planning、Multi-Agent。它们不是必须全用，而是根据任务复杂度选择：简单问答不需要完整 Agent。",
+      ["Reflection 用于自我检查和改写。", "Planning 用于拆解多步骤任务。", "Multi-Agent 用于角色分工，但会增加成本和不确定性。"],
+      refs.dlaiAgentic
+    ),
+    card(
+      "Agent 的停止条件",
+      "Agent 最大风险不是不会行动，而是行动太多、权限太大、无法收敛。工程上要设置预算、最大步骤、可调用工具范围、审计日志和人工接管点。",
+      ["限制迭代次数、Token、费用和工具权限。", "保存每一步观察、决策和工具结果。", "遇到低置信、高风险或权限不足时停止。"],
+      refs.openaiAgentGuide
+    )
+  ],
+  工具平台: [
+    card(
+      "低代码平台的定位",
+      "Dify/Coze 适合快速验证 Chatflow、Workflow、知识库和插件组合。它们能帮助你先跑通业务流程，再判断哪些部分需要代码级工程化。",
+      ["先用平台验证需求，再沉淀工程架构。", "关注权限、日志、版本和可迁移性。", "不要把平台原型误认为最终系统设计。"],
+      refs.dify
+    ),
+    card(
+      "知识库 Pipeline",
+      "企业知识库不是上传文件就结束，而是一条持续运营的 Pipeline：数据源接入、内容抽取、清洗切分、索引存储、召回评估和用户反馈。",
+      ["文档更新要能增量同步。", "权限标签要进入检索链路。", "反馈数据要反哺切分、召回和提示词。"],
+      refs.dify
+    ),
+    card(
+      "企业 MVP 的边界",
+      "第一版企业知识库应优先证明“能不能稳定回答核心问题”。不要一开始追求全量自动化，而是挑高频场景、固定样例集和明确验收指标。",
+      ["先做 20-50 个黄金问题集。", "统计命中率、引用准确率和用户采纳率。", "为无法回答的问题设计转人工或收集反馈。"],
+      refs.langchainEval
+    )
+  ],
+  模型工程: [
+    card(
+      "RAG、Prompt、微调的选择",
+      "Prompt 适合快速约束行为，RAG 适合引入外部知识，Fine-tuning 更适合稳定风格、格式或特定任务模式。不要用微调替代动态知识更新。",
+      ["知识频繁变化优先 RAG。", "输出格式不稳定先尝试结构化输出和评测。", "微调前要准备高质量、可授权的数据。"],
+      refs.aiEngineering
+    ),
+    card(
+      "ML 基础：泛化与过拟合",
+      "机器学习的核心不是背训练集，而是在新样本上泛化。训练集、验证集和测试集用于分别学习参数、选择方案和估计真实表现。",
+      ["训练集用于拟合，验证集用于调参。", "测试集不要反复用于决策。", "过拟合表现为训练好、泛化差。"],
+      refs.googleMl
+    ),
+    card(
+      "PyTorch 工作流",
+      "PyTorch 入门可按 tensor、dataset/dataloader、model、loss、optimizer、training loop 这条线理解。先掌握最小训练循环，再学习复杂模型。",
+      ["Tensor 是数值计算基础。", "DataLoader 负责批处理和打乱。", "训练循环要包含前向、损失、反向传播和参数更新。"],
+      refs.pytorch
+    )
+  ],
+  综合项目: [
+    card(
+      "项目拆解方法",
+      "综合项目要从场景出发，而不是从模型出发。先定义用户、输入、输出、成功标准、风险边界，再选择模型、检索、工具和数据结构。",
+      ["AI 搜索重视召回、引用和排序。", "AI BI 重视指标口径、权限和 SQL 安全。", "营销助手重视品牌语气、审核和素材来源。"],
+      refs.aiEngineering
+    ),
+    card(
+      "评测与回归",
+      "作品集里的 AI 项目要展示评测意识：准备样例集、评分 rubric、失败案例和改进记录。这样别人能判断你的系统是否可持续优化。",
+      ["保留固定问题集做回归测试。", "用人工 rubric 评估事实性、完整性和安全性。", "上线后跟踪成本、延迟、采纳率和错误率。"],
+      refs.langchainEval
+    ),
+    card(
+      "作品集表达",
+      "好的作品集不只是截图，而是讲清楚问题、约束、方案、实现、效果和复盘。尤其要展示你如何处理模型不确定性和工程部署问题。",
+      ["写清业务背景和用户流程。", "展示架构图、关键代码和线上地址。", "诚实记录失败案例和下一步优化。"],
+      refs.openaiAgentGuide
+    )
+  ]
+};
+
+type CourseSeed = Omit<CourseDay, "assessments" | "deepDives" | "knowledgeCards" | "recommendedBooks"> & {
   quizFocus: string;
   choiceOne: { question: string; options: string[]; answer: string; explanation: string };
   choiceTwo: { question: string; options: string[]; answer: string; explanation: string };
@@ -849,6 +992,7 @@ export const courseDays: CourseDay[] = seeds.map((item) => ({
   summary: item.summary,
   learningObjectives: item.learningObjectives,
   concepts: item.concepts,
+  knowledgeCards: buildKnowledgeCards(item),
   deepDives: moduleDeepDives[item.module],
   tasks: item.tasks,
   assessments: buildAssessments(item),
@@ -882,6 +1026,7 @@ export function assertCourseIsComplete(days = courseDays) {
       !item.title ||
       !item.learningObjectives.length ||
       !item.concepts.length ||
+      item.knowledgeCards.length < 4 ||
       !item.deepDives.length ||
       !item.tasks.length ||
       !item.project ||
@@ -900,6 +1045,12 @@ export function assertCourseIsComplete(days = courseDays) {
         throw new Error(`Invalid single choice assessment ${assessment.id}`);
       }
     });
+
+    item.knowledgeCards.forEach((card) => {
+      if (!card.title || !card.body || card.bullets.length < 3 || !card.sourceUrl.startsWith("https://")) {
+        throw new Error(`Invalid knowledge card for day ${item.day}`);
+      }
+    });
   });
 }
 
@@ -913,6 +1064,40 @@ function uniqueReferences(references: CourseDay["references"]) {
     seen.add(reference.url);
     return true;
   });
+}
+
+function buildKnowledgeCards(item: CourseSeed): CourseKnowledgeCard[] {
+  const primaryReference = item.references[0] ?? refs.aiEngineering;
+
+  return [
+    {
+      title: `Day ${item.day} 学习抓手`,
+      body: `今天先围绕“${item.title}”建立可复述的概念框架，再用任务把概念落到一个小产出。重点不是记术语，而是能解释它解决什么问题、什么时候不适合用。`,
+      bullets: [
+        `关键词：${item.concepts.join("、")}。`,
+        `测验重点：${item.quizFocus}。`,
+        `最终产出：${item.project}。`
+      ],
+      sourceTitle: primaryReference.title,
+      sourceUrl: primaryReference.url
+    },
+    ...moduleKnowledgeCards[item.module]
+  ];
+}
+
+function card(
+  title: string,
+  body: string,
+  bullets: string[],
+  source: (typeof refs)[keyof typeof refs]
+): CourseKnowledgeCard {
+  return {
+    title,
+    body,
+    bullets,
+    sourceTitle: source.title,
+    sourceUrl: source.url
+  };
 }
 
 function seed(

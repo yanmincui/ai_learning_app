@@ -44,6 +44,14 @@ export type CourseReference = {
   url: string;
 };
 
+export type CourseKnowledgeCard = {
+  title: string;
+  body: string;
+  bullets: string[];
+  sourceTitle: string;
+  sourceUrl: string;
+};
+
 export type CourseDay = {
   day: number;
   title: string;
@@ -52,6 +60,7 @@ export type CourseDay = {
   summary: string;
   learningObjectives: string[];
   concepts: string[];
+  knowledgeCards: CourseKnowledgeCard[];
   deepDives: string[];
   tasks: string[];
   assessments: Assessment[];

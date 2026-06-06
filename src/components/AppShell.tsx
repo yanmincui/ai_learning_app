@@ -596,7 +596,7 @@ function CourseLearningIntro({
       </div>
 
       <DetailBlock icon={Target} title="学习目标" items={course.learningObjectives} />
-      <ConceptGrid concepts={course.concepts} />
+      <KnowledgeCardList course={course} />
       <DetailBlock icon={BookOpen} title="深挖清单" items={course.deepDives} />
       <DetailBlock icon={ListChecks} title="今日任务" items={course.tasks} />
 
@@ -778,18 +778,44 @@ function DetailBlock({ icon: Icon, title, items }: { icon: typeof ListChecks; ti
   );
 }
 
-function ConceptGrid({ concepts }: { concepts: string[] }) {
+function KnowledgeCardList({ course }: { course: CourseDay }) {
   return (
     <section className="mt-5">
       <div className="flex items-center gap-2">
         <BookOpen size={18} className="text-mint" />
         <h3 className="text-base font-bold">核心知识点</h3>
       </div>
+
       <div className="mt-3 flex flex-wrap gap-2">
-        {concepts.map((concept) => (
+        {course.concepts.map((concept) => (
           <span key={concept} className="rounded-full bg-sun/20 px-3 py-2 text-xs font-bold text-ink/70">
             {concept}
           </span>
+        ))}
+      </div>
+
+      <div className="mt-3 space-y-3">
+        {course.knowledgeCards.map((card) => (
+          <article key={`${course.day}-${card.title}`} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-ink/5">
+            <h4 className="text-sm font-bold leading-5 text-ink">{card.title}</h4>
+            <p className="mt-2 text-xs leading-5 text-ink/65">{card.body}</p>
+            <ul className="mt-3 space-y-2">
+              {card.bullets.map((bullet) => (
+                <li key={bullet} className="flex gap-2 text-xs leading-5 text-ink/68">
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-mint" />
+                  <span>{bullet}</span>
+                </li>
+              ))}
+            </ul>
+            <a
+              href={card.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 inline-flex rounded-full bg-mist px-3 py-2 text-[11px] font-bold text-ink/58"
+            >
+              来源：{card.sourceTitle}
+            </a>
+          </article>
         ))}
       </div>
     </section>

@@ -13,12 +13,24 @@ describe("courseDays", () => {
         (day) =>
           day.learningObjectives.length > 0 &&
           day.concepts.length > 0 &&
+          day.knowledgeCards.length >= 4 &&
           day.deepDives.length >= 3 &&
           day.references.length > 0 &&
           day.recommendedBooks.length > 0 &&
           day.project.length > 0
       )
     ).toBe(true);
+  });
+
+  it("adds sourced teaching cards for core concepts", () => {
+    courseDays.forEach((day) => {
+      expect(day.knowledgeCards.length).toBeGreaterThanOrEqual(4);
+      day.knowledgeCards.forEach((card) => {
+        expect(card.body.length).toBeGreaterThan(40);
+        expect(card.bullets).toHaveLength(3);
+        expect(card.sourceUrl).toMatch(/^https:\/\//);
+      });
+    });
   });
 
   it("includes agentic design pattern resources in the agent module", () => {
