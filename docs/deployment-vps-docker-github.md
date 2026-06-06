@@ -110,8 +110,8 @@ AI_MODEL=gpt-4o-mini
 GitHub push
 -> GitHub Actions 运行 test/lint/build
 -> SSH 登录 VPS
--> 保留 VPS 上的 .env
--> 如果配置了 VPS_ENV 且 VPS 没有 .env，则自动写入 .env
+-> 如果配置了 VPS_ENV，则用它写入 VPS 上的 .env
+-> 如果没有配置 VPS_ENV，则保留 VPS 上已有的 .env
 -> 上传本次提交的源码到 VPS
 -> docker compose build ai-learning-h5
 -> docker compose up -d ai-learning-h5
