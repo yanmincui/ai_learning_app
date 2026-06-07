@@ -28,6 +28,7 @@ import {
 import type { CachedDayProgress } from "@/lib/progress-cache";
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+const apiPath = (path: string) => `${basePath}${path}`;
 
 type Props = {
   courseDays: CourseDay[];
@@ -39,6 +40,28 @@ type Props = {
 type DayProgress = CachedDayProgress;
 type LocalProgress = Record<number, DayProgress>;
 type NavId = "home" | "learning" | "news" | "projects" | "profile";
+type AuthUser = {
+  userId: string;
+  provider: "wechat";
+  nickname?: string;
+  avatarUrl?: string;
+};
+
+type SessionResponse = {
+  canUseWechatLogin: boolean;
+  user: AuthUser | null;
+};
+
+type ProgressResponse = {
+  progress: Array<{
+    day: number;
+    status: "todo" | "doing" | "done";
+    quizScore?: number;
+    wrongQuestionIds?: string[];
+    lastReviewedAt?: string;
+    updatedAt?: string;
+  }>;
+};
 
 const navItems: Array<{ id: NavId; label: string; icon: typeof Home }> = [
   { id: "home", label: "首页", icon: Home },
@@ -51,6 +74,9 @@ const navItems: Array<{ id: NavId; label: string; icon: typeof Home }> = [
 export function AppShell({ courseDays, newsItems, today, updatedAt }: Props) {
   const [progress, setProgress] = useState<LocalProgress>({});
   const [userId, setUserId] = useState("");
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [canUseWechatLogin, setCanUseWechatLogin] = useState(false);
+  const [syncStatus, setSyncStatus] = useState("本地缓存已启用");
   const [activeNav, setActiveNav] = useState<NavId>("home");
   const [selectedCourse, setSelectedCourse] = useState<CourseDay | null>(null);
   const completedCount = Object.values(progress).filter((item) => item.status === "done").length;
@@ -60,14 +86,43 @@ export function AppShell({ courseDays, newsItems, today, updatedAt }: Props) {
   const wrongCount = Object.values(progress).reduce((sum, item) => sum + (item.wrongQuestionIds?.length ?? 0), 0);
 
   useEffect(() => {
+    void bootstrapUser();
+  }, []);
+
+  async function bootstrapUser() {
+    const localProgress = readLocalProgress(window.localStorage);
     const savedUserId =
       window.localStorage.getItem("ai-learning-user-id") ??
       `guest-${crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
 
-    setProgress(readLocalProgress(window.localStorage));
+    setProgress(localProgress);
     window.localStorage.setItem("ai-learning-user-id", savedUserId);
     setUserId(savedUserId);
-  }, []);
+
+    const session = await fetchJson<SessionResponse>(apiPath("/api/auth/session/"));
+    if (!session) {
+      return;
+    }
+
+    setCanUseWechatLogin(session.canUseWechatLogin);
+
+    if (!session.user) {
+      setSyncStatus(session.canUseWechatLogin ? "游客模式：登录微信后可跨设备同步" : "游客模式：配置微信后可登录同步");
+      return;
+    }
+
+    setAuthUser(session.user);
+    setUserId(session.user.userId);
+
+    const remote = await fetchJson<ProgressResponse>(apiPath("/api/progress/"));
+    const remoteProgress = progressListToMap(remote?.progress ?? []);
+    const mergedProgress = mergeProgressMaps(localProgress, remoteProgress);
+
+    setProgress(mergedProgress);
+    writeLocalProgress(window.localStorage, mergedProgress);
+    setSyncStatus("微信已登录，学习记录已同步");
+    await syncProgressMap(mergedProgress, session.user.userId);
+  }
 
   function jumpTo(id: NavId) {
     setActiveNav(id);
@@ -109,12 +164,26 @@ export function AppShell({ courseDays, newsItems, today, updatedAt }: Props) {
     clearQuizDraft(window.localStorage, day);
 
     if (userId) {
-      await fetch(`${basePath}/api/progress`, {
+      await fetch(apiPath("/api/progress/"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, day, status: "done", quizScore, wrongQuestionIds })
       }).catch(() => undefined);
     }
+  }
+
+  function loginWithWechat() {
+    const returnTo = `${window.location.pathname}${window.location.search}`;
+    window.location.href = `${apiPath("/api/auth/wechat/start/")}?returnTo=${encodeURIComponent(returnTo)}`;
+  }
+
+  async function logout() {
+    await fetch(apiPath("/api/auth/logout/"), { method: "POST" }).catch(() => undefined);
+    const guestUserId = `guest-${crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
+    window.localStorage.setItem("ai-learning-user-id", guestUserId);
+    setAuthUser(null);
+    setUserId(guestUserId);
+    setSyncStatus("已退出微信登录，当前使用本地缓存");
   }
 
   return (
@@ -204,8 +273,47 @@ export function AppShell({ courseDays, newsItems, today, updatedAt }: Props) {
           <p className="text-xs text-white/60">我的学习</p>
           <h2 className="mt-1 text-xl font-bold">继续保持节奏</h2>
           <p className="mt-3 text-sm leading-6 text-white/70">
-            测验分数和错题会先保存在浏览器本地；配置 Supabase 后，会同步写入云端，便于后续跨设备学习。
+            测验分数、错题和学习状态会先保存在浏览器本地；微信登录后会同步写入云端，便于后续跨设备学习。
           </p>
+          <div className="mt-4 rounded-2xl bg-white/10 p-4">
+            <div className="flex items-center gap-3">
+              {authUser?.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={authUser.avatarUrl}
+                  alt=""
+                  className="h-11 w-11 rounded-full bg-white/20 object-cover"
+                />
+              ) : (
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15">
+                  <UserRound size={21} />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold">{authUser?.nickname || (authUser ? "微信用户" : "游客学习者")}</p>
+                <p className="mt-1 text-xs leading-5 text-white/55">{syncStatus}</p>
+              </div>
+            </div>
+
+            {authUser ? (
+              <button
+                type="button"
+                onClick={logout}
+                className="mt-4 h-11 w-full rounded-2xl bg-white/12 text-sm font-bold text-white"
+              >
+                退出微信登录
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={loginWithWechat}
+                disabled={!canUseWechatLogin}
+                className="mt-4 h-11 w-full rounded-2xl bg-mint text-sm font-bold text-ink disabled:bg-white/12 disabled:text-white/45"
+              >
+                {canUseWechatLogin ? "微信登录并同步" : "微信登录待配置"}
+              </button>
+            )}
+          </div>
         </div>
       </section>
 
@@ -858,4 +966,80 @@ function formatAnswer(answer: string | boolean) {
 
 function getWrongQuestionIds(assessments: Assessment[], answers: Record<string, string | boolean>) {
   return assessments.filter((assessment) => answers[assessment.id] !== assessment.answer).map((assessment) => assessment.id);
+}
+
+async function fetchJson<T>(url: string): Promise<T | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      return null;
+    }
+
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+function progressListToMap(items: ProgressResponse["progress"]): LocalProgress {
+  return Object.fromEntries(
+    items.map((item) => [
+      item.day,
+      {
+        status: item.status,
+        quizScore: item.quizScore,
+        wrongQuestionIds: item.wrongQuestionIds,
+        lastReviewedAt: item.lastReviewedAt ?? item.updatedAt
+      }
+    ])
+  ) as LocalProgress;
+}
+
+function mergeProgressMaps(localProgress: LocalProgress, remoteProgress: LocalProgress): LocalProgress {
+  const days = new Set([...Object.keys(localProgress), ...Object.keys(remoteProgress)].map(Number));
+  const merged: LocalProgress = {};
+
+  days.forEach((day) => {
+    const local = localProgress[day];
+    const remote = remoteProgress[day];
+
+    if (!local) {
+      merged[day] = remote;
+      return;
+    }
+
+    if (!remote) {
+      merged[day] = local;
+      return;
+    }
+
+    merged[day] =
+      getProgressRank(local.status) >= getProgressRank(remote.status)
+        ? { ...remote, ...local }
+        : { ...local, ...remote };
+  });
+
+  return merged;
+}
+
+function getProgressRank(status: DayProgress["status"]) {
+  return { todo: 0, doing: 1, done: 2 }[status];
+}
+
+async function syncProgressMap(progress: LocalProgress, userId: string) {
+  await Promise.all(
+    Object.entries(progress).map(([day, item]) =>
+      fetch(apiPath("/api/progress/"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          day: Number(day),
+          status: item.status,
+          quizScore: item.quizScore,
+          wrongQuestionIds: item.wrongQuestionIds
+        })
+      }).catch(() => undefined)
+    )
+  );
 }

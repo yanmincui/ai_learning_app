@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { progressSchema } from "@/lib/progress";
+import { progressSchema, saveProgress } from "@/lib/progress";
 
 describe("progressSchema", () => {
   it("accepts valid progress", () => {
@@ -22,5 +22,20 @@ describe("progressSchema", () => {
         status: "done"
       })
     ).toThrow();
+  });
+
+  it("prefers authenticated user id when saving progress", async () => {
+    const progress = await saveProgress(
+      {
+        userId: "guest-123456",
+        day: 2,
+        status: "done",
+        quizScore: 80,
+        wrongQuestionIds: []
+      },
+      "wx-openid-123"
+    );
+
+    expect(progress.userId).toBe("wx-openid-123");
   });
 });

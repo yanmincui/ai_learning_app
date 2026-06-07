@@ -40,6 +40,17 @@ create table if not exists public.user_progress (
   primary key (user_id, day)
 );
 
+create table if not exists public.wechat_users (
+  user_id text primary key,
+  openid text not null unique,
+  unionid text unique,
+  nickname text,
+  avatar_url text,
+  last_login_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.news_runs (
   id bigserial primary key,
   status text not null,
@@ -51,6 +62,7 @@ create table if not exists public.news_runs (
 
 alter table public.news_items enable row level security;
 alter table public.user_progress enable row level security;
+alter table public.wechat_users enable row level security;
 alter table public.news_runs enable row level security;
 
 create policy "news is readable"
@@ -60,5 +72,9 @@ create policy "news is readable"
 create policy "progress can be read by owner-like guest id"
   on public.user_progress for select
   using (true);
+
+create policy "wechat profile can be read by service role only"
+  on public.wechat_users for select
+  using (false);
 
 -- The app writes with SUPABASE_SERVICE_ROLE_KEY on the server.

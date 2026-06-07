@@ -91,4 +91,5 @@ export type UserProgress = {
   wrongQuestionIds?: string[];
   lastReviewedAt?: string;
   completedAt?: string;
+  updatedAt?: string;
 };
