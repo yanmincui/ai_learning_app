@@ -51,7 +51,9 @@ SUPABASE_SERVICE_ROLE_KEY=你的service_role key
 
 `SUPABASE_SERVICE_ROLE_KEY` 只能放服务端环境变量里，不要写进前端代码，不要提交到 GitHub。
 
-## 4. 配置微信登录相关环境变量
+## 4. 配置微信/小程序环境变量
+
+微信相关配置单独放 GitHub Secret `MINI_PROGRAM_ENV`，不要放进 `VPS_ENV`。
 
 H5/公众号网页授权：
 
@@ -74,7 +76,7 @@ WECHAT_MINI_APP_SECRET=你的小程序AppSecret
 
 保存 GitHub Secret 后，重新运行 GitHub Actions 部署。
 
-部署脚本会把 `VPS_ENV` 写入 VPS：
+部署脚本会把 `VPS_ENV` 写入 VPS，再追加 `MINI_PROGRAM_ENV`：
 
 ```text
 /opt/ai-learning-h5/.env

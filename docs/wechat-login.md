@@ -18,9 +18,11 @@ https://ian.today/ai-learning/api/auth/wechat/callback/
 
 如果使用开放平台网站应用扫码登录，把 `WECHAT_OAUTH_MODE` 改为 `open`，并在开放平台配置对应回调域名。
 
-## 2. GitHub Secret / VPS_ENV
+## 2. GitHub Secret / MINI_PROGRAM_ENV
 
-在 `VPS_ENV` 里增加：
+微信相关配置单独放 GitHub Secret `MINI_PROGRAM_ENV`，不要放进 `VPS_ENV`。
+
+在 `MINI_PROGRAM_ENV` 里增加：
 
 ```text
 AUTH_SECRET=请换成至少32位随机字符串
@@ -28,11 +30,6 @@ WECHAT_APP_ID=你的微信公众号AppID
 WECHAT_APP_SECRET=你的微信公众号AppSecret
 WECHAT_OAUTH_MODE=mp
 WECHAT_OAUTH_SCOPE=snsapi_userinfo
-```
-
-如果后续还要接微信小程序登录，继续预留：
-
-```text
 WECHAT_MINI_APP_ID=你的小程序AppID
 WECHAT_MINI_APP_SECRET=你的小程序AppSecret
 ```

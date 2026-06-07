@@ -74,7 +74,8 @@ VPS_PORT=22
 VPS_USER=你的VPS登录用户
 VPS_SSH_KEY=用于登录VPS的私钥内容
 VPS_APP_DIR=/opt/ai-learning-h5
-VPS_ENV=完整的 .env 文件内容，可选但推荐
+VPS_ENV=通用服务 .env 内容，可选但推荐
+MINI_PROGRAM_ENV=微信/小程序相关 .env 内容，可选
 ```
 
 `VPS_SSH_KEY` 是 GitHub Actions 用来登录 VPS 的私钥。对应公钥要放到 VPS 的：
@@ -96,6 +97,20 @@ AI_BASE_URL=https://api.openai.com/v1
 AI_API_KEY=
 AI_MODEL=gpt-4o-mini
 ```
+
+`MINI_PROGRAM_ENV` 示例：
+
+```text
+AUTH_SECRET=至少32位随机字符串
+WECHAT_APP_ID=你的微信公众号AppID
+WECHAT_APP_SECRET=你的微信公众号AppSecret
+WECHAT_OAUTH_MODE=mp
+WECHAT_OAUTH_SCOPE=snsapi_userinfo
+WECHAT_MINI_APP_ID=你的小程序AppID
+WECHAT_MINI_APP_SECRET=你的小程序AppSecret
+```
+
+微信相关配置不要再放进 `VPS_ENV`。部署时 workflow 会先写入 `VPS_ENV`，再把 `MINI_PROGRAM_ENV` 追加到 VPS 的 `.env`。
 
 ## 3. 自动部署流程
 
@@ -119,6 +134,7 @@ GitHub push
 -> SSH 登录 VPS
 -> 如果配置了 VPS_ENV，则用它写入 VPS 上的 .env
 -> 如果没有配置 VPS_ENV，则保留 VPS 上已有的 .env
+-> 如果配置了 MINI_PROGRAM_ENV，则追加微信/小程序环境变量
 -> 上传本次提交的源码到 VPS
 -> docker compose build ai-learning-h5
 -> docker compose up -d ai-learning-h5

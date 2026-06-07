@@ -194,6 +194,17 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 
+AI_BASE_URL=https://api.openai.com/v1
+AI_API_KEY=
+AI_MODEL=gpt-4o-mini
+NEWS_INGEST_SECRET=
+```
+
+### MINI_PROGRAM_ENV
+
+微信和小程序相关配置单独放在 GitHub Secret `MINI_PROGRAM_ENV`，不要放进 `VPS_ENV`：
+
+```text
 AUTH_SECRET=
 WECHAT_APP_ID=
 WECHAT_APP_SECRET=
@@ -201,12 +212,9 @@ WECHAT_OAUTH_MODE=mp
 WECHAT_OAUTH_SCOPE=snsapi_userinfo
 WECHAT_MINI_APP_ID=
 WECHAT_MINI_APP_SECRET=
-
-AI_BASE_URL=https://api.openai.com/v1
-AI_API_KEY=
-AI_MODEL=gpt-4o-mini
-NEWS_INGEST_SECRET=
 ```
+
+部署时 GitHub Actions 会先写入 `VPS_ENV`，再把 `MINI_PROGRAM_ENV` 追加到 VPS 的 `/opt/ai-learning-h5/.env`。
 
 如果你有域名，改成：
 
