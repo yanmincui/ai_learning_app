@@ -30,3 +30,5 @@ pnpm ingest:news
 
 - Docker + GitHub 自动部署：见 [docs/vps-step-by-step-install.md](docs/vps-step-by-step-install.md)
 - 传统 CentOS/PM2 部署：见 [docs/deployment-centos9.md](docs/deployment-centos9.md)
+- Supabase 搭建：见 [docs/supabase-setup.md](docs/supabase-setup.md)
+- 微信登录配置：见 [docs/wechat-login.md](docs/wechat-login.md)

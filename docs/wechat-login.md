@@ -30,6 +30,15 @@ WECHAT_OAUTH_MODE=mp
 WECHAT_OAUTH_SCOPE=snsapi_userinfo
 ```
 
+如果后续还要接微信小程序登录，继续预留：
+
+```text
+WECHAT_MINI_APP_ID=你的小程序AppID
+WECHAT_MINI_APP_SECRET=你的小程序AppSecret
+```
+
+当前 H5 登录使用 `WECHAT_APP_ID` / `WECHAT_APP_SECRET`。小程序登录会使用 `WECHAT_MINI_APP_ID` / `WECHAT_MINI_APP_SECRET`，后续通过小程序端 `wx.login` 返回的 `code` 调服务端换取 `openid/session_key`。
+
 原有子路径配置保持：
 
 ```text
